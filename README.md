@@ -1,7 +1,7 @@
 HoverBall
 =========
 
-image::  https://github.com/mcpalmer1980/pygame-hoverball/master/pics/hoverball.png
+![GitHub Logo](/pics/hoverball.png)
 
 pygame example using pymunk physics and drawing primitives.
 
