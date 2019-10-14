@@ -1,7 +1,7 @@
 HoverBall
 =========
 
-.. image::  "pics/hoverball.png"
+.. image::  pics/hoverball.png
 
 pygame example using pymunk physics and drawing primitives.
 
