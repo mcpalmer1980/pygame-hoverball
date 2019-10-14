@@ -1,0 +1,335 @@
+from constants import *
+import hb_globals as g
+
+EITHER = -1
+state_file = root_dir+'hboptions.dat'
+#
+class Arena():
+	def __init__(self, scene):
+		self.scene = scene
+		self.space = scene.space
+
+		self.arenas = {
+			'Spinnuza': { 'border': True, 'spin': 0.5, 'walls': (
+					((0.2, .5), (0.8, .5)),) },
+			'Crosspin': { 'border': False, 'spin': 0.18, 'walls': (
+					((.1, .5), (.9, .5)),
+					((.5, .1), (.5, .9)) ) },
+			'Emptuno': {'border': EITHER, 'walls': (
+				() ) },
+			'Unverta': { 'border': EITHER, 'walls':(
+				((.5, .25), (.5, .75)),) },
+			'Acrossin': {'border': False, 'walls':(
+				((-.5, .5), (1.5, .5)),
+				((.5, -.5), (.5, 1.5)) ) },
+			'Botoxid': { 'border': EITHER, 'walls': (
+				((.35,.25), (.65,.25)),
+				((.35,.75), (.65,.75)),
+				((.25,.35), (.25,.65)),
+				((.75,.35), (.75,.65)) ) },
+			'Croaire': {'border': EITHER, 'walls': (
+				((.0,.5), (.35,.5)),
+				((.65,.5), (1,.5)),
+				((.5,.0), (.5,.35)),
+				((.5,.65), (.5,1)) ) },
+			'Dulhora': {'border': EITHER, 'walls': (
+				((.2,.3), (.8,.3)),
+				((.2,.7), (.8,.7)) ) },
+			'Hashin': {'border': EITHER, 'walls': (
+				((.2,.2), (.4,.2)),
+				((.2,.8), (.4,.8)),
+				((.6,.2), (.8,.2)),
+				((.6,.8), (.8,.8)),
+				((.5,.4), (.5,.6)) ) },
+			'Exudos': {'border': EITHER, 'walls':(
+				((.2, .2), (.8, .8)),
+				((.2, .8), (.8, .2)) ) },
+			'Inswatz': {'border': False, 'walls':(
+				((.2, .2), (.5, .2)),
+				((.5, .2), (.5, .8)),
+				((.5, .8), (.8, .8)),
+				((.8, .2), (.8, .5)),
+				((.8, .5), (.2, .5)),
+				((.2, .5), (.2, .8)) ) },
+			'Travert': { 'border': EITHER, 'walls': (
+				((.2,.25), (.2,.75)),
+				((.5,.25), (.5,.75)),
+				((.8,.25), (.8,.75)) )},
+			'Unhora': { 'border': EITHER, 'walls': (
+				((.25,.5), (.75,.5)), )},
+			'Verzag': { 'border': EITHER, 'walls': (
+				((.3,.0), (.3,.5)),
+				((.7,.5), (.7,1)) ) } }
+		print('Available Arenas:')
+		for a in sorted(self.arenas):
+			print('\t{}'.format(a))
+		self.shuffled_arenas = list(self.arenas.keys())
+		rand.shuffle(self.shuffled_arenas)
+
+	def AddBorder(self, bounce = False):
+		scale = self.scale
+		rx = RESX*scale if bounce else RESX*scale + g.BALL_SIZE
+		ry = RESY*scale if bounce else RESY*scale + g.BALL_SIZE
+		z = 0 if bounce else -g.BALL_SIZE
+
+		lines = []
+		walls = (
+			((z, z), (rx, z)),
+			((rx, z), (rx, ry)),
+			((rx, ry), (z, ry)),
+			((z, ry), (z, z)) )
+		borders = [ (0, RESY*scale), (1, 0), (0, 1), (RESX*scale, 0) ]
+		filt = pymunk.ShapeFilter(mask=g.COLLIDE_BALL | g.COLLIDE_PLAYER)
+
+		for p1, p2 in walls:
+			body = pymunk.Body(body_type=pymunk.Body.STATIC)
+			shape = pymunk.Segment(body, p1, p2, 0.0)
+			shape.friction = 0
+			shape.elasticity = 1
+			shape.collision_type = g.COLLIDE_WALL if bounce else g.COLLIDE_BORDER
+			shape.other_border = borders.pop(0)
+			shape.filter = filt
+			self.space.add(shape)
+			lines.append(shape)
+		if bounce:
+			return lines
+		return lines
+		return []
+
+	def AddWalls(self, arena):
+		space = self.space
+		scale = self.scale
+		lines = []
+		spin = self.options.get('spin', 50) - 50
+
+		if 'spin' in arena:
+			spin = arena['spin']
+			if rand.randrange(2):
+				spin *= -1
+		elif abs(spin) > 5:
+			spin = g.MAX_SPIN * ((spin) / 50.0)
+		else:
+			spin = False
+		self.spin = spin
+
+		jitter = self.options.get('jitter', 0) / 100.0
+		self.jitter_velocity = None
+
+		if spin or jitter:
+			body = pymunk.Body(body_type=pymunk.Body.KINEMATIC)
+			space.add(body)
+		else:
+			body = pymunk.Body(body_type=pymunk.Body.STATIC)
+		self.wall_body = body
+
+		if jitter:
+			self.jitter_velocity = Vec2d(0, g.JITTER_SPEED * jitter)
+			self.jitter_velocity.rotate_degrees(rand.randrange(360))
+			self.jitter_high = RESY // 2 + g.JITTER_SPACE * jitter
+			self.jitter_low = RESY // 2 - g.JITTER_SPACE * jitter
+
+		body.position = HALF_SCREEN
+		if scale > 1:
+			body.position *= scale
+		sub = Vec2d(0.5, 0.5)
+		mult = Vec2d(RESX * scale, RESY * scale)
+
+		for line in arena['walls']:
+			p1, p2 = line
+			p1 = Vec2d(p1); p2 = Vec2d(p2)
+			p1 -= sub; p2 -= sub
+			p1 *= mult; p2 *= mult
+
+			shape = pymunk.Segment(body, p1, p2, 4) #4=0.0
+			shape.mass = 1 #added
+			shape.friction = 0
+			#shape.elasticity = .75 if spin else .99#.99=1
+			shape.elasticity = .99
+			shape.filter = pymunk.ShapeFilter(categories=g.COLLIDE_WALL )
+			shape.collision_type = g.COLLIDE_WALL
+			space.add(shape)
+			lines.append(shape)
+
+
+
+		return lines
+
+	def Clear(self):
+		space = self.scene.space
+		
+		for s in space.shapes:
+			#if hasattr(s, "generated") and s.generated:
+			space.remove(s)
+		for b in space.bodies:
+			space.remove(b)
+		for c in space.constraints:
+			space.remove(c)
+		self.lines = []
+
+	def Draw(self, tx, ty):
+		if self.spin:
+			self.wall_body.angle += self.spin
+
+		if self.jitter_velocity:
+			self.wall_body.position += self.jitter_velocity
+			mi = RESY *.3; ma = RESY * .6
+			hit = False
+			if self.wall_body.position.x < self.jitter_low or self.wall_body.position.x > self.jitter_high:
+				self.jitter_velocity.x *= -1
+				self.wall_body.position.x += self.jitter_velocity.x
+			if self.wall_body.position.y < self.jitter_low or self.wall_body.position.y > self.jitter_high:
+				self.jitter_velocity.y *= -1
+				self.wall_body.position.y += self.jitter_velocity.y
+		self.space.reindex_shapes_for_body(self.wall_body)
+
+		for line in self.lines:
+			body = line.body
+			
+			pv1 = body.position + line.a.rotated(body.angle)
+			pv2 = body.position + line.b.rotated(body.angle)
+			p1 = pv1.x-tx, flipy(pv1.y-ty)
+			p2 = pv2.x-tx, flipy(pv2.y-ty)
+			pygame.draw.lines(self.scene.screen, g.WALL_COLOR, False, [p1,p2], 4)
+
+	def Next(self, opt, scale=1):
+		self.options = opt
+		self.scale = scale
+		self.Clear()
+		if opt.get('arena', None) in self.arenas:
+			arena = opt['arena']
+			print('{} arena requested'.format(arena))
+		else:
+			arena = self.shuffled_arenas.pop(0)
+			self.shuffled_arenas.append(arena)
+			print('{} arena randomly selected'.format(arena))
+		self.current = arena
+		arena = self.arenas[arena]
+
+		if not self.SetBorder(arena, **opt):	return
+		if 'function' in arena:
+			self.lines += arena['function']()
+		else:
+			self.lines += self.AddWalls(arena)
+
+	def SetBorder(self, _arena, **opt):
+		#MATCH BORDER REQUEST
+		if opt.get('border', None) in ('Bounce', 'Wrap'):
+			wants_border = True if opt['border'] == 'Bounce' else False
+			if _arena['border'] == wants_border or _arena['border'] == EITHER:
+				print('border request honored')
+				self.lines = self.AddBorder(wants_border)
+			elif opt.get('arena', None):
+				print('cannot meet border request: ignoring it')
+				self.lines = self.AddBorder(not wants_border)
+			else:
+				print('border request unavailabe for random arena: trying next')
+				self.Next(opt)
+				return False
+		else:
+
+			#RANDOMIZE BORDER IF NO OPTION REQUESTED
+			print('no border option requested, picking random')
+			if _arena['border'] == EITHER and rand.randrange(2):
+				self.lines = self.AddBorder(True)
+			elif _arena['border'] == True:
+				self.lines = self.AddBorder(True)
+			else:
+				self.lines = self.AddBorder(False)
+		return True
+
+
+	def crossed_arena(self):
+		space = self.space
+		lines=[]
+		body = pymunk.Body()
+		body.position = HALF_SCREEN
+		shape = pymunk.Segment(body, (0,RESY*.4), (0,-RESY*.4), 4)
+		shape.mass = 2
+		shape.friction = 0.0
+		shape.elasticity = .99
+		shape2 = pymunk.Segment(body, (RESX*.4, 0), (-RESX*.4, 0), 4)
+		shape2.mass = 2
+		shape2.friction = 0.0
+		shape2.elasticity = .99
+		space.add(body, shape, shape2)
+	
+		space.add(pymunk.PivotJoint(body, space.static_body, HALF_SCREEN))
+		c = pymunk.SimpleMotor(shape.body, space.static_body, .18)
+		space.add(c)
+
+		lines.append(shape2)
+		lines.append(shape)
+		return lines
+
+	def spinner_arena(self):
+		space = self.space
+		lines=[]
+		body = pymunk.Body()
+		body.position = HALF_SCREEN
+		shape = pymunk.Segment(body, (0,RESY*.33), (0,-RESY*.33), 4)
+		shape.mass = 2
+		shape.friction = 0.0
+		shape.elasticity = .99
+	
+		space.add(body, shape)
+	
+		space.add(pymunk.PivotJoint(body, space.static_body, HALF_SCREEN))
+		c = pymunk.SimpleMotor(shape.body, space.static_body, .5)
+		space.add(c)
+	
+		lines.append(shape)
+		return lines
+
+
+##############################################################################
+
+class OptionStorage():
+	
+	def __init__(self, filename):
+		self.filename = filename
+		options = None
+		if not os.path.exists(filename):
+			options = {}
+			print('OptionStore: nothing to get')
+		else:
+			try:
+				inf = open(filename, 'rb')
+				options = pickle.load(inf)
+				inf.close()
+				print('OptionStore loaded from {}'.format(filename))
+			except:
+				print('OptionStore failure!')
+				options = {}
+
+		self.options = options.get('options', {})
+		self.saved_options = options.get('saved', {})
+
+	def Add(self, name):
+		self.saved_options[name] = self.options.copy()
+
+	def Get(self, name=None):
+		if name in self.saved_options:
+			return self.saved_options[name]
+		else:
+			return self.options
+
+	def Reset(self):
+		if os.path.exists(state_file):
+			os.remove(state_file)
+		self.options = {}
+		self.saved_options = {}
+		return self.options
+
+	def Save(self):
+		options = { 'options': self.options, 'saved': self.saved_options}
+
+		pick = open(self.filename, 'wb')
+		pickle.dump(options, pick)
+		pick.close()
+		print('OptionStore saved to {}'.format(self.filename))
+
+
+
+OptionStore = OptionStorage(state_file)
+
+
